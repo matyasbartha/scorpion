@@ -196,28 +196,97 @@ void CEGAR::refinement_loop() {
     utils::Timer refine_timer(false);
     utils::Timer update_goal_distances_timer(false);
 
+    vector<int> fixed_trace_ops;
+    unique_ptr<Solution> solution;
+    int number_of_searches = 0;
+
     while (may_keep_refining()) {
         find_trace_timer.resume();
-        unique_ptr<Solution> solution;
-        solution = shortest_paths->extract_solution(
+
+        if(fixed_trace_ops.empty()) {
+            
+            solution = shortest_paths->extract_solution(
             abstraction->get_initial_state().get_id(),
             abstraction->get_goals());
-        find_trace_timer.stop();
+            number_of_searches++;
 
-        if (solution) {
-            int new_abstract_solution_cost =
-                shortest_paths->get_32bit_goal_distance(
-                    abstraction->get_initial_state().get_id());
-            if (new_abstract_solution_cost > old_abstract_solution_cost) {
-                old_abstract_solution_cost = new_abstract_solution_cost;
-                if (log.is_at_least_verbose()) {
-                    log << "Lower bound: " << old_abstract_solution_cost
-                        << endl;
+            if (solution) {
+                fixed_trace_ops.clear();
+                for (const Transition &step : *solution) {
+                    fixed_trace_ops.push_back(step.op_id);
+                }
+
+                int new_abstract_solution_cost =
+                    shortest_paths->get_32bit_goal_distance(
+                        abstraction->get_initial_state().get_id());
+                if (new_abstract_solution_cost > old_abstract_solution_cost) {
+                    old_abstract_solution_cost = new_abstract_solution_cost;
+                    if (log.is_at_least_verbose()) {
+                        log << "Lower bound: " << old_abstract_solution_cost
+                            << endl;
+                    }
+                }
+            } else {
+                find_trace_timer.stop();
+                log << "Abstract task is unsolvable." << endl;
+                break;
+            }
+        }
+
+        
+        //reconstruct one CONNECTED abstract path for fixed_trace_ops.
+        unique_ptr<Solution> reconstructed_solution = make_unique<Solution>();
+
+        struct PartialPath {
+            int state_id;
+            vector<Transition> path;
+        };
+
+        vector<PartialPath> paths;
+        paths.push_back({abstraction->get_initial_state().get_id(), {}});
+
+        for (int op_id : fixed_trace_ops) {
+            vector<PartialPath> next_paths;
+
+            for (const PartialPath &p : paths) {
+                for (const Transition &t :
+                    abstraction->get_outgoing_transitions(p.state_id)) {
+
+                    if (t.op_id == op_id) {
+                        PartialPath next = p;
+                        next.state_id = t.target_id;
+                        next.path.push_back(t);
+                        next_paths.push_back(move(next));
+                    }
                 }
             }
-        } else {
-            log << "Abstract task is unsolvable." << endl;
-            break;
+
+            paths = move(next_paths);
+
+            if (paths.empty()) {
+                break;
+            }
+        }
+
+        // Need a path that ends in an abstract goal state.
+        bool trace_still_exists = false;
+
+        for (const PartialPath &p : paths) {
+            if (abstraction->get_goals().count(p.state_id)) {
+                for (const Transition &t : p.path) {
+                    reconstructed_solution->push_back(t);
+                }
+                trace_still_exists = true;
+                break;
+            }
+        }
+
+        find_trace_timer.stop();
+
+        if (!trace_still_exists) {
+            fixed_trace_ops.clear();
+            solution.reset();
+            continue;
         }
 
         find_flaw_timer.resume();
@@ -226,7 +295,7 @@ void CEGAR::refinement_loop() {
         unique_ptr<Split> split;
         if (pick_flawed_abstract_state ==
             PickFlawedAbstractState::FIRST_ON_SHORTEST_PATH) {
-            split = flaw_search->get_split_legacy(*solution);
+            split = flaw_search->get_split_legacy(*reconstructed_solution);
         } else {
             split = flaw_search->get_split(timer);
         }
@@ -271,16 +340,18 @@ void CEGAR::refinement_loop() {
                 << "/" << max_stored_transitions << " transitions" << endl;
         }
     }
+
     if (log.is_at_least_normal()) {
-        log << "Time for finding abstract traces: " << find_trace_timer << endl;
-        log << "Time for finding flaws and computing splits: "
-            << find_flaw_timer << endl;
-        log << "Time for splitting states: " << refine_timer << endl;
-        log << "Time for updating goal distances: "
-            << update_goal_distances_timer << endl;
-        log << "Number of refinements: " << abstraction->get_num_states() - 1
-            << endl;
+    log << "Time for finding abstract traces: " << find_trace_timer << endl;
+    log << "Time for finding flaws and computing splits: "
+        << find_flaw_timer << endl;
+    log << "Time for splitting states: " << refine_timer << endl;
+    log << "Time for updating goal distances: "
+        << update_goal_distances_timer << endl;
+    log << "Number of refinements: " << abstraction->get_num_states() - 1
+          << endl;
     }
+    log << "Number of searches: " << number_of_searches << endl;
 }
 
 void CEGAR::dump_dot_graph() const {
