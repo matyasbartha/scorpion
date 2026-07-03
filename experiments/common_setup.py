@@ -32,6 +32,16 @@ def parse_args():
 
 ARGS = parse_args()
 
+DEFAULT_TEST_SUITE = [
+        "gripper:prob01.pddl",
+        "gripper:prob02.pddl",
+        "gripper:prob03.pddl",
+        "blocks:probBLOCKS-4-0.pddl",
+        "blocks:probBLOCKS-4-1.pddl",
+        "blocks:probBLOCKS-5-0.pddl",
+    ]
+
+    
 #all (optimal) benchmarks without adl features
 ALL_SYMBOLIC_SUITE = [
     'agricola-opt18-strips', 

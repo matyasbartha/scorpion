@@ -27,8 +27,13 @@ DRIVER_OPTIONS = ["--overall-time-limit", f"{TIME_LIMIT}s", "--overall-memory-li
 
 if common_setup.is_running_on_cluster():
     #SUITE = common_setup.DEFAULT_OPTIMAL_SUITE
-    SUITE = common_setup.BLOCKS_SUITE
-    ENVIRONMENT = BaselSlurmEnvironment(memory_per_cpu=f"{MEMORY_LIMIT + MEMORY_PADDING}M", partition="infai_2")
+    SUITE = common_setup.DEFAULT_TEST_SUITE
+    ENVIRONMENT = BaselSlurmEnvironment(
+        partition="infai_2",
+        email="m.bartha@stud.unibas.ch",
+        memory_per_cpu="3947M",
+        export=["PATH"],
+    )
 else:
     #SUITE = common_setup.CartesianExperiment.DEFAULT_TEST_SUITE
     SUITE = common_setup.CartesianExperiment.DEFAULT_TEST_SUITE
@@ -39,41 +44,13 @@ else:
 CONFIGS = []
 CONFIGS += [
     common_setup.Config(
-        f"master-sym-fw-fd_ordering",
-        "variable_ordering",
-        ["--search", "sym_fw(variable_ordering=fd_ordering())"],
-        driver_options=DRIVER_OPTIONS,
-    ),
-    common_setup.Config(
-        f"master-sym-fw-gamer_ordering",
-        "variable_ordering",
-        ["--search", "sym_fw(variable_ordering=gamer_ordering())"],
-        driver_options=DRIVER_OPTIONS,
-    ),
-    common_setup.Config(
-        f"master-sym-fw-blocks_ordering",
-        "variable_ordering",
-        ["--search", "sym_fw(variable_ordering=blocks_ordering())"],
-        driver_options=DRIVER_OPTIONS,
-    ),
-    common_setup.Config(
-        f"master-sym-fw-fd_ordering_reversed",
-        "variable_ordering",
-        ["--search", "sym_fw(variable_ordering=fd_ordering(reversed=True))"],
+        f"master-cartesian",
+        "cartesian",
+        ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
 ]
 
-for i in range(1000):
-    s = "sym_fw(variable_ordering=random_ordering(random_seed=" + str(i) + "))"
-    CONFIGS += [
-        common_setup.Config(
-            f"master-sym-fw-random(random_seed=" + str(i) + "))",
-            "variable_ordering",
-            ["--search", s],
-            driver_options=DRIVER_OPTIONS,
-        ),
-    ]
 
 exp = common_setup.CartesianExperiment(
     repo_base=PLANNER_DIR,
@@ -90,6 +67,7 @@ exp.add_parser(exp.PLANNER_PARSER)
 exp.add_parser(top_k_parser.get_parser())
 
 ATTRIBUTES = CartesianExperiment.DEFAULT_TABLE_ATTRIBUTES
+"""
 SYM_ATTRIBUTES = ["domain_sizes",
                   "max_domain_size",
                   "min_domain_size",
@@ -98,13 +76,14 @@ SYM_ATTRIBUTES = ["domain_sizes",
                   "num_bin_vars",
                   "num_bdd_nodes",
                   "num_peak_bdd_nodes"]
+"""
 
 exp.add_step("build", exp.build)
 exp.add_step("start", exp.start_runs)
 exp.add_step("parse", exp.parse)
 exp.add_fetcher(name="fetch")
 exp.add_report(
-    AbsoluteReport(attributes=ATTRIBUTES + SYM_ATTRIBUTES, filter_algorithm=[x.nick for x in CONFIGS]),
+    AbsoluteReport(attributes=ATTRIBUTES """ + SYM_ATTRIBUTES""", filter_algorithm=[x.nick for x in CONFIGS]),
     outfile="report6.html",
 )
 
