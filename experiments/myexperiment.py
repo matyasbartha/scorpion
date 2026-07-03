@@ -87,12 +87,6 @@ exp.add_report(
     outfile="report6.html",
 )
 
-"""
-exp.add_report(
-    AbsoluteReport(attributes=ATTRIBUTES """ + SYM_ATTRIBUTES""", filter_algorithm=[x.nick for x in CONFIGS]),
-    outfile="report6.html",
-)
-"""
 
 
 
