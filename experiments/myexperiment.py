@@ -83,9 +83,16 @@ exp.add_step("start", exp.start_runs)
 exp.add_step("parse", exp.parse)
 exp.add_fetcher(name="fetch")
 exp.add_report(
+    AbsoluteReport(attributes=ATTRIBUTES, filter_algorithm=[x.nick for x in CONFIGS]),
+    outfile="report6.html",
+)
+
+"""
+exp.add_report(
     AbsoluteReport(attributes=ATTRIBUTES """ + SYM_ATTRIBUTES""", filter_algorithm=[x.nick for x in CONFIGS]),
     outfile="report6.html",
 )
+"""
 
 
 
