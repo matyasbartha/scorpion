@@ -3,7 +3,6 @@
 
 import common_setup
 from common_setup import CartesianExperiment
-import top_k_parser
 
 import os
 from pathlib import Path
@@ -45,7 +44,7 @@ CONFIGS = []
 CONFIGS += [
     common_setup.Config(
         f"master-cartesian",
-        "cartesian",
+        "HEAD",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
@@ -64,7 +63,6 @@ exp.add_parser(exp.EXITCODE_PARSER)
 exp.add_parser(exp.TRANSLATOR_PARSER)
 exp.add_parser(exp.SINGLE_SEARCH_PARSER)
 exp.add_parser(exp.PLANNER_PARSER)
-exp.add_parser(top_k_parser.get_parser())
 
 ATTRIBUTES = CartesianExperiment.DEFAULT_TABLE_ATTRIBUTES
 """
