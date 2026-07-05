@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lab.reports import Attribute
 
+from scatterMulti import ScatterMultiPlotReport 
 
 from downward.reports.absolute import AbsoluteReport
 
@@ -62,6 +63,13 @@ exp = common_setup.CartesianExperiment(
     environment=ENVIRONMENT,
 )
 
+def domain_as_category(run1, run2):
+    return run1["domain"]
+
+
+def algorithm_as_category(run1, run2):
+    return run2["algorithm"]
+
 exp.add_suite(BENCHMARKS_DIR, SUITE)
 
 exp.add_parser(exp.EXITCODE_PARSER)
@@ -87,14 +95,16 @@ exp.add_report(
 # Add report step (AbsoluteReport is the standard report).
 CARTESIAN_ATTRIBUTES = ["total_time","cartesian_states", "run_dir", "flaw_search_time", "additive_cartesian_heuristic_build_time", "search_start_time", "search_start_memory", "cartesian_states_if_cs", "additive_cartesian_heuristic_build_time_if_cs", Attribute("cegar_found_concrete_solution", min_wins=False), Attribute("cegar_proved_unsolvability", min_wins=False), "cegar_reached_time_limit", "cegar_reached_memory_limit", "cegar_outcome", "expansions_until_last_jump", "cost", Attribute("coverage", min_wins=False),"error","expansions", "search_time", "split_computing_time", Attribute("initial_h_value", min_wins=False), "memory", "cegar_reached_time_limit_in_flaw_search", "cegar_reached_memory_limit_in_flaw_search", "num_state_expansions_in_flaw_search", "max_num_state_expansions_in_flaw_search", "pick_computing_time", "max_expansion_with_flaw", "max_expansion_without_flaw"]
 
-exp.add_report(AbsoluteReport(attributes=CARTESIAN_ATTRIBUTES,filter_algorithm=["final_single_path_max_refined", "final_max_h_single_max_refined", "final_min_h_single_max_refined", "final_min_h_single_max_cover", "final_min_h_batch_multi_split_max_cover"]), outfile='final_report.html')
+exp.add_report(AbsoluteReport(attributes=CARTESIAN_ATTRIBUTES), outfile='final_report.html')
+
+"""
 #
 plot_configs = ["final_min_h_batch_multi_split_max_cover", "final_single_path_max_refined", "final_max_h_single_max_refined", "final_min_h_single_max_refined", "final_min_h_single_max_cover"]
 #
 for att in ["cartesian_states_if_cs", "additive_cartesian_heuristic_build_time_if_cs", "expansions_until_last_jump", "initial_h_value"]:
     exp.add_report(ScatterMultiPlotReport(relative=False,attributes=att,get_category=algorithm_as_category,filter_algorithm=plot_configs,format="tex",show_missing=True),name=att)
 
-
+"""
 
 
 

@@ -15,8 +15,6 @@ from downward.reports.absolute import AbsoluteReport
 from downward.reports.compare import ComparativeReport
 from downward.reports.scatter import ScatterPlotReport
 
-from scatterMulti import ScatterMultiPlotReport 
-
 
 import itertools
 import random
