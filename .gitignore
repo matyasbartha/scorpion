@@ -9,6 +9,7 @@ __pycache__/
 /builds/
 /experiments/*/.venv/
 /experiments/*/data/
+/experiments/data/
 /misc/.tox/
 /misc/autodoc/downward-xmlrpc.secret
 /misc/tests/output.sas

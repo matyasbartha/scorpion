@@ -7,9 +7,14 @@ from common_setup import CartesianExperiment
 import os
 from pathlib import Path
 
+from lab.reports import Attribute
+
+
 from downward.reports.absolute import AbsoluteReport
 
 from lab.environments import LocalEnvironment, BaselSlurmEnvironment
+
+from parser import get_parser
 
 """
 Experiment script for cartesian experiments
@@ -63,7 +68,7 @@ exp.add_parser(exp.EXITCODE_PARSER)
 exp.add_parser(exp.TRANSLATOR_PARSER)
 exp.add_parser(exp.SINGLE_SEARCH_PARSER)
 exp.add_parser(exp.PLANNER_PARSER)
-exp.add_parser("parser.py")
+exp.add_parser(get_parser())
 
 
 ATTRIBUTES = CartesianExperiment.DEFAULT_TABLE_ATTRIBUTES
