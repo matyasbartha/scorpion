@@ -12,6 +12,8 @@
 #include <execution>
 #include <map>
 
+#include <random>
+
 using namespace std;
 
 namespace cartesian_abstractions {
@@ -149,14 +151,26 @@ unique_ptr<Solution> ShortestPaths::extract_solution(
         return nullptr;
     }
 
+    static std::mt19937 rng(std::random_device{}());
+
     int current_state = init_id;
     unique_ptr<Solution> solution = make_unique<Solution>();
     assert(!goals.count(current_state));
     while (!goals.count(current_state)) {
         assert(!use_cache || !parents[current_state].empty());
         // Pick arbitrary parent if there are multiple parents.
-        Transition t =
-            use_cache ? parents[current_state].front() : parent[current_state];
+
+        //Transition t =
+        //    use_cache ? parents[current_state].front() : parent[current_state];
+        Transition t;
+        if (use_cache) {
+            const auto &ps = parents[current_state];
+            std::uniform_int_distribution<size_t> dist(0, ps.size() - 1);
+            t = ps[dist(rng)];
+        } else {
+            t = parent[current_state];
+        }
+
         assert(t.is_defined());
         assert(t.target_id != current_state);
         assert(
