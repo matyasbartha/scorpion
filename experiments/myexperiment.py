@@ -49,8 +49,20 @@ else:
 CONFIGS = []
 CONFIGS += [
     common_setup.Config(
-        f"master-cartesian",
-        "HEAD",
+        f"original-cegar",
+        "original-scorpion",
+        ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
+        driver_options=DRIVER_OPTIONS,
+    ),
+    common_setup.Config(
+        f"random-optimal-path",
+        "random-path",
+        ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
+        driver_options=DRIVER_OPTIONS,
+    ),
+    common_setup.Config(
+        f"master-cegar",
+        "scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
