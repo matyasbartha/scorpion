@@ -15,3 +15,4 @@ __pycache__/
 /misc/tests/output.sas
 .vscode/
 compile_commands.json
+.DS_Store
