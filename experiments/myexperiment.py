@@ -30,39 +30,44 @@ BENCHMARKS_DIR = os.environ["DOWNWARD_BENCHMARKS"]
 PLANNER_DIR = os.environ["SCORPION_MATYAS"]
 DRIVER_OPTIONS = ["--overall-time-limit", f"{TIME_LIMIT}s", "--overall-memory-limit", f"{MEMORY_LIMIT}M"]
 
-if common_setup.is_running_on_cluster():
-    #SUITE = common_setup.DEFAULT_OPTIMAL_SUITE
-    SUITE = common_setup.DEFAULT_TEST_SUITE
-    ENVIRONMENT = BaselSlurmEnvironment(
-        partition="infai_2",
-        email="m.bartha@stud.unibas.ch",
-        memory_per_cpu="3947M",
-        export=["PATH"],
-    )
-else:
-    #SUITE = common_setup.CartesianExperiment.DEFAULT_TEST_SUITE
+
+SUITE = common_setup.ALL_SYMBOLIC_SUITE
+ENVIRONMENT = BaselSlurmEnvironment(
+    partition="infai_2",
+    email="m.bartha@stud.unibas.ch",
+    memory_per_cpu="3947M",
+    extra_options="#SBATCH --time=00:30:00",
+    export=["PATH"],
+)
+
+"""
+if common_setup.is_test_run():
     SUITE = common_setup.CartesianExperiment.DEFAULT_TEST_SUITE
     ENVIRONMENT = LocalEnvironment(processes=4)
     DRIVER_OPTIONS = ["--overall-time-limit", "30s"]
+"""
 
+print("is_test_run:", common_setup.is_test_run())
+print("ENVIRONMENT:", type(ENVIRONMENT))
+print("DRIVER_OPTIONS:", DRIVER_OPTIONS)
 
 CONFIGS = []
 CONFIGS += [
     common_setup.Config(
         f"original-cegar",
-        "original-scorpion",
+        "origin/original-scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
     common_setup.Config(
         f"random-optimal-path",
-        "random-path",
+        "origin/random-path",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
     common_setup.Config(
         f"master-cegar",
-        "scorpion",
+        "origin/scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
         driver_options=DRIVER_OPTIONS,
     ),
@@ -109,14 +114,29 @@ CARTESIAN_ATTRIBUTES = ["total_time","cartesian_states", "run_dir", "flaw_search
 
 exp.add_report(AbsoluteReport(attributes=CARTESIAN_ATTRIBUTES), outfile='final_report.html')
 
-"""
-#
-plot_configs = ["final_min_h_batch_multi_split_max_cover", "final_single_path_max_refined", "final_max_h_single_max_refined", "final_min_h_single_max_refined", "final_min_h_single_max_cover"]
-#
-for att in ["cartesian_states_if_cs", "additive_cartesian_heuristic_build_time_if_cs", "expansions_until_last_jump", "initial_h_value"]:
-    exp.add_report(ScatterMultiPlotReport(relative=False,attributes=att,get_category=algorithm_as_category,filter_algorithm=plot_configs,format="tex",show_missing=True),name=att)
+plot_configs = [
+    "master-cegar",
+    "original-cegar",
+    "random-optimal-path",
+]
 
-"""
+for att in [
+    "cartesian_states_if_cs",
+    "additive_cartesian_heuristic_build_time_if_cs",
+    "expansions_until_last_jump",
+    "initial_h_value",
+]:
+    exp.add_report(
+        ScatterMultiPlotReport(
+            relative=False,
+            attributes=att,
+            get_category=algorithm_as_category,
+            filter_algorithm=plot_configs,
+            format="tex",
+            show_missing=True,
+        ),
+        name=att,
+    )
 
 
 
