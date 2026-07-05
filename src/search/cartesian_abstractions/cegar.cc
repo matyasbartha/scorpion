@@ -196,7 +196,6 @@ void CEGAR::refinement_loop() {
     utils::Timer refine_timer(false);
     utils::Timer update_goal_distances_timer(false);
 
-    int number_of_searches = 0;
     while (may_keep_refining()) {
         find_trace_timer.resume();
         unique_ptr<Solution> solution;
@@ -204,7 +203,6 @@ void CEGAR::refinement_loop() {
             abstraction->get_initial_state().get_id(),
             abstraction->get_goals());
         find_trace_timer.stop();
-        number_of_searches++;
 
         if (solution) {
             int new_abstract_solution_cost =
@@ -283,7 +281,6 @@ void CEGAR::refinement_loop() {
         log << "Number of refinements: " << abstraction->get_num_states() - 1
             << endl;
     }
-    log << "Number of searches: " << number_of_searches << endl;
 }
 
 void CEGAR::dump_dot_graph() const {
