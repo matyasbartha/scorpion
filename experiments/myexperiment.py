@@ -21,22 +21,17 @@ from parser import get_parser
 Experiment script for cartesian experiments
 """
 
-MEMORY_LIMIT = 6144
-MEMORY_PADDING = 6354 - MEMORY_LIMIT # infai_2 has 6354 MB per cpu
-TIME_LIMIT = 5 * 60
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS_DIR = os.environ["DOWNWARD_BENCHMARKS"]
 PLANNER_DIR = os.environ["SCORPION_MATYAS"]
-DRIVER_OPTIONS = ["--overall-time-limit", f"{TIME_LIMIT}s", "--overall-memory-limit", f"{MEMORY_LIMIT}M"]
-
 
 SUITE = common_setup.ALL_SYMBOLIC_SUITE
 ENVIRONMENT = BaselSlurmEnvironment(
     partition="infai_2",
     email="m.bartha@stud.unibas.ch",
     memory_per_cpu="3947M",
-    extra_options="#SBATCH --time=00:30:00",
+    time_limit_per_task="00:45:00",
     export=["PATH"],
 )
 
@@ -47,29 +42,22 @@ if common_setup.is_test_run():
     DRIVER_OPTIONS = ["--overall-time-limit", "30s"]
 """
 
-print("is_test_run:", common_setup.is_test_run())
-print("ENVIRONMENT:", type(ENVIRONMENT))
-print("DRIVER_OPTIONS:", DRIVER_OPTIONS)
-
 CONFIGS = []
 CONFIGS += [
     common_setup.Config(
         f"original-cegar",
         "origin/original-scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
-        driver_options=DRIVER_OPTIONS,
     ),
     common_setup.Config(
         f"random-optimal-path",
         "origin/random-path",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
-        driver_options=DRIVER_OPTIONS,
     ),
     common_setup.Config(
         f"master-cegar",
         "origin/scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
-        driver_options=DRIVER_OPTIONS,
     ),
 ]
 
@@ -124,7 +112,6 @@ for att in [
     "cartesian_states_if_cs",
     "additive_cartesian_heuristic_build_time_if_cs",
     "expansions_until_last_jump",
-    "initial_h_value",
 ]:
     exp.add_report(
         ScatterMultiPlotReport(
@@ -137,6 +124,18 @@ for att in [
         ),
         name=att,
     )
+
+exp.add_report(
+    ScatterMultiPlotReport(
+        relative=False,
+        attributes=Attribute("initial_h_value", min_wins=False),
+        get_category=algorithm_as_category,
+        filter_algorithm=plot_configs,
+        format="tex",
+        show_missing=False,
+    ),
+    name="initial_h_value",
+)
 
 
 
