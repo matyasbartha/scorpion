@@ -15,6 +15,8 @@
 #include "../utils/memory.h"
 #include "../utils/rng.h"
 
+#include <unordered_set>
+
 using namespace std;
 
 namespace cartesian_abstractions {
@@ -652,6 +654,214 @@ unique_ptr<Split> FlawSearch::get_split_legacy(const Solution &solution) {
         return create_split(
             {concrete_state.get_id()}, abstract_state->get_id());
     }
+}
+
+unique_ptr<Split> FlawSearch::get_split_legacy(
+    const vector<int> &operator_sequence,
+    bool &trace_still_exists) {
+    state_registry = make_unique<StateRegistry>(task_proxy);
+
+    bool debug = log.is_at_least_debug();
+
+    if (debug) {
+        log << "Check fixed operator sequence:" << endl;
+    }
+
+    /*
+      viable_states[i] contains all abstract states from which the suffix
+
+          operator_sequence[i], ..., operator_sequence.back()
+
+      can be followed to an abstract goal state.
+
+      This avoids enumerating and copying all complete abstract paths.
+    */
+    vector<unordered_set<int>> viable_states(
+        operator_sequence.size() + 1);
+
+    /*
+      After all operators have been applied, the path must be in an
+      abstract goal state.
+    */
+    for (int goal_id : abstraction.get_goals()) {
+        viable_states[operator_sequence.size()].insert(goal_id);
+    }
+
+    /*
+      Compute viable states backwards.
+
+      A state is viable at position i if it has a transition labelled with
+      operator_sequence[i] to a state that is viable at position i + 1.
+    */
+    for (size_t index = operator_sequence.size(); index > 0; --index) {
+        size_t op_index = index - 1;
+        int op_id = operator_sequence[op_index];
+
+        for (int state_id = 0;
+             state_id < abstraction.get_num_states();
+             ++state_id) {
+            for (const Transition &transition :
+                 abstraction.get_outgoing_transitions(state_id)) {
+                if (transition.op_id == op_id &&
+                    viable_states[index].count(
+                        transition.target_id)) {
+                    viable_states[op_index].insert(state_id);
+                    break;
+                }
+            }
+        }
+    }
+
+    const AbstractState *abstract_state =
+        &abstraction.get_initial_state();
+
+    /*
+      If the abstract initial state is not viable, no abstract path with
+      this operator sequence reaches an abstract goal anymore.
+    */
+    if (!viable_states[0].count(abstract_state->get_id())) {
+        trace_still_exists = false;
+
+        if (debug) {
+            log << "Fixed operator sequence no longer reaches "
+                << "an abstract goal." << endl;
+        }
+
+        return nullptr;
+    }
+
+    trace_still_exists = true;
+
+    State concrete_state =
+        state_registry->get_initial_state();
+
+    assert(abstract_state->includes(concrete_state));
+
+    if (debug) {
+        log << "  Initial abstract state: "
+            << *abstract_state << endl;
+    }
+
+    /*
+      Follow one connected, goal-reaching abstract path with the fixed
+      operator sequence and simultaneously simulate the operators concretely.
+    */
+    for (size_t op_index = 0;
+         op_index < operator_sequence.size();
+         ++op_index) {
+        int op_id = operator_sequence[op_index];
+
+        OperatorProxy op =
+            task_proxy.get_operators()[op_id];
+
+        /*
+          Select a transition whose target can still realize the remaining
+          suffix of the operator sequence.
+        */
+        const Transition *selected_transition = nullptr;
+
+        for (const Transition &transition :
+             abstraction.get_outgoing_transitions(
+                 abstract_state->get_id())) {
+            if (transition.op_id == op_id &&
+                viable_states[op_index + 1].count(
+                    transition.target_id)) {
+                selected_transition = &transition;
+                break;
+            }
+        }
+
+        /*
+          This should not happen because abstract_state was marked viable.
+          Treat it defensively as the operator sequence disappearing.
+        */
+        if (!selected_transition) {
+            trace_still_exists = false;
+
+            if (debug) {
+                log << "No connected abstract transition for "
+                    << op.get_name() << endl;
+            }
+
+            return nullptr;
+        }
+
+        const AbstractState *next_abstract_state =
+            &abstraction.get_state(
+                selected_transition->target_id);
+
+        /*
+          The selected operator is part of an abstract path but is not
+          applicable in the corresponding concrete state: this is a flaw.
+        */
+        if (!task_properties::is_applicable(
+                op,
+                concrete_state)) {
+            if (debug) {
+                log << "  Operator not applicable: "
+                    << op.get_name() << endl;
+            }
+
+            return create_split(
+                {concrete_state.get_id()},
+                abstract_state->get_id());
+        }
+
+        State next_concrete_state =
+            state_registry->get_successor_state(
+                concrete_state,
+                op);
+
+        /*
+          The concrete successor does not belong to the selected abstract
+          successor: the abstract and concrete paths diverge.
+        */
+        if (!next_abstract_state->includes(
+                next_concrete_state)) {
+            if (debug) {
+                log << "  Paths deviate after "
+                    << op.get_name() << endl;
+            }
+
+            return create_split(
+                {concrete_state.get_id()},
+                abstract_state->get_id());
+        }
+
+        if (debug) {
+            log << "  Move to "
+                << *next_abstract_state
+                << " with "
+                << op.get_name()
+                << endl;
+        }
+
+        abstract_state = next_abstract_state;
+        concrete_state = move(next_concrete_state);
+    }
+
+    assert(
+        abstraction.get_goals().count(
+            abstract_state->get_id()));
+
+    if (task_properties::is_goal_state(
+            task_proxy,
+            concrete_state)) {
+        // The fixed operator sequence is a real concrete solution.
+        return nullptr;
+    }
+
+    if (debug) {
+        log << "  Goal test failed." << endl;
+    }
+
+    /*
+      All operators could be followed, but the final concrete state is not a
+      goal. Refine the final abstract state.
+    */
+    return create_split(
+        {concrete_state.get_id()},
+        abstract_state->get_id());
 }
 
 void FlawSearch::print_statistics() const {

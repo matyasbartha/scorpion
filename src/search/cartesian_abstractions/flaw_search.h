@@ -12,6 +12,7 @@
 #include "../utils/timer.h"
 
 #include <stack>
+#include <vector>
 
 namespace utils {
 class CountdownTimer;
@@ -98,6 +99,13 @@ public:
 
     std::unique_ptr<Split> get_split(const utils::CountdownTimer &cegar_timer);
     std::unique_ptr<Split> get_split_legacy(const Solution &solution);
+    // NEW:
+    // Checks the fixed operator sequence in the current abstraction.
+    // trace_still_exists becomes false if no abstract goal-reaching path
+    // with this operator sequence exists anymore.
+    std::unique_ptr<Split> get_split_legacy(
+        const std::vector<int> &operator_sequence,
+        bool &trace_still_exists);
 
     void print_statistics() const;
 };

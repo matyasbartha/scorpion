@@ -198,23 +198,26 @@ void CEGAR::refinement_loop() {
 
     vector<int> fixed_trace_ops;
     unique_ptr<Solution> solution;
+    bool have_fixed_trace = false;
     int number_of_searches = 0;
 
     while (may_keep_refining()) {
         find_trace_timer.resume();
 
-        if(fixed_trace_ops.empty()) {
-            
+        if(!have_fixed_trace) {
             solution = shortest_paths->extract_solution(
-            abstraction->get_initial_state().get_id(),
-            abstraction->get_goals());
-            number_of_searches++;
+                abstraction->get_initial_state().get_id(),
+                abstraction->get_goals());
+            
+            ++number_of_searches;
 
             if (solution) {
                 fixed_trace_ops.clear();
                 for (const Transition &step : *solution) {
                     fixed_trace_ops.push_back(step.op_id);
                 }
+
+                have_fixed_trace = true;
 
                 int new_abstract_solution_cost =
                     shortest_paths->get_32bit_goal_distance(
@@ -233,73 +236,37 @@ void CEGAR::refinement_loop() {
             }
         }
 
-        
-        //reconstruct one CONNECTED abstract path for fixed_trace_ops.
-        unique_ptr<Solution> reconstructed_solution = make_unique<Solution>();
-
-        struct PartialPath {
-            int state_id;
-            vector<Transition> path;
-        };
-
-        vector<PartialPath> paths;
-        paths.push_back({abstraction->get_initial_state().get_id(), {}});
-
-        for (int op_id : fixed_trace_ops) {
-            vector<PartialPath> next_paths;
-
-            for (const PartialPath &p : paths) {
-                for (const Transition &t :
-                    abstraction->get_outgoing_transitions(p.state_id)) {
-
-                    if (t.op_id == op_id) {
-                        PartialPath next = p;
-                        next.state_id = t.target_id;
-                        next.path.push_back(t);
-                        next_paths.push_back(move(next));
-                    }
-                }
-            }
-
-            paths = move(next_paths);
-
-            if (paths.empty()) {
-                break;
-            }
-        }
-
-        // Need a path that ends in an abstract goal state.
-        bool trace_still_exists = false;
-
-        for (const PartialPath &p : paths) {
-            if (abstraction->get_goals().count(p.state_id)) {
-                for (const Transition &t : p.path) {
-                    reconstructed_solution->push_back(t);
-                }
-                trace_still_exists = true;
-                break;
-            }
-        }
-
-        find_trace_timer.stop();
-
-        if (!trace_still_exists) {
-            fixed_trace_ops.clear();
-            solution.reset();
-            continue;
-        }
-
         find_flaw_timer.resume();
         // split==nullptr iff we find a concrete solution or run out of time or
         // memory.
         unique_ptr<Split> split;
+
+        bool trace_still_exists = true;
         if (pick_flawed_abstract_state ==
             PickFlawedAbstractState::FIRST_ON_SHORTEST_PATH) {
-            split = flaw_search->get_split_legacy(*reconstructed_solution);
+            split = flaw_search->get_split_legacy(fixed_trace_ops, trace_still_exists);
         } else {
             split = flaw_search->get_split(timer);
         }
         find_flaw_timer.stop();
+
+        /*
+        CHANGED:
+        nullptr does not mean "concrete solution" when the operator sequence
+        disappeared. Handle disappearance first.
+        */
+        if (!trace_still_exists) {
+            fixed_trace_ops.clear();
+            solution.reset();
+            have_fixed_trace = false;
+
+            if (log.is_at_least_debug()) {
+                log << "Fixed operator sequence no longer exists. "
+                    << "Search a new optimal trace." << endl;
+            }
+
+            continue;
+        }
 
         if (!utils::extra_memory_padding_is_reserved()) {
             log << "Reached memory limit in flaw search." << endl;
@@ -340,6 +307,7 @@ void CEGAR::refinement_loop() {
                 << "/" << max_stored_transitions << " transitions" << endl;
         }
     }
+
 
     if (log.is_at_least_normal()) {
     log << "Time for finding abstract traces: " << find_trace_timer << endl;
