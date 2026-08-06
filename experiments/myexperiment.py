@@ -59,6 +59,11 @@ CONFIGS += [
         "origin/scorpion",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
     ),
+    common_setup.Config(
+        f"master-cegar-optimized",
+        "origin/optimized-master",
+        ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
+    ),
 ]
 
 
@@ -106,6 +111,7 @@ plot_configs = [
     "master-cegar",
     "original-cegar",
     "random-optimal-path",
+    "master-cegar-optimized"
 ]
 
 for att in [

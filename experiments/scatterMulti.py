@@ -3,6 +3,7 @@ import itertools
 import logging
 import math
 import os
+import re
 
 from downward.reports import PlanningReport
 from downward.reports.scatter_matplotlib import ScatterMatplotlib
@@ -207,26 +208,54 @@ class ScatterMultiPlotReport(PlanningReport):
 
     def _get_category_styles(self, categories):
         """
-        Create dictionary mapping from category name to marker style.
+        Assign fixed marker shapes and colors to algorithms.
         """
-        shapes = "x+os^v<>D"
-        colors = [f"C{c}" for c in range(10)]
+        marker_map = {
+            "master-cegar": "^",
+            "original-cegar": "o",
+            "random-optimal-path": "s",
+        }
 
-        num_styles = len(shapes) * len(colors)
-        styles = [
-            {"marker": shape, "c": color}
-            for shape, color in itertools.islice(
-                zip(itertools.cycle(shapes), itertools.cycle(colors)), num_styles
-            )
-        ]
-        assert (
-            len({(s["marker"], s["c"]) for s in styles}) == num_styles
-        ), "The number of shapes and the number of colors must be coprime."
+        color_map = {
+            "master-cegar": "C0",
+            "original-cegar": "C1",
+            "random-optimal-path": "C2",
+        }
 
         category_styles = {}
-        for i, category in enumerate(sorted(categories)):
-            category_styles[category] = styles[i % len(styles)]
+
+        for category in sorted(categories):
+            category_styles[category] = {
+                "marker": marker_map.get(category, "o"),
+                "c": color_map.get(category, "C0"),
+            }
+
         return category_styles
+
+    def _add_tex_transparency(self):
+        """
+        Add marker transparency to the generated PGFPlots file.
+        """
+        if self.output_format != "tex":
+            return
+
+        with open(self.outfile, encoding="utf-8") as file:
+            tex = file.read()
+
+        # Handles commands such as:
+        # \addplot+[only marks,mark=...] coordinates {
+        tex = re.sub(
+            r"(\\addplot\+\[)([^\]]*)\]",
+            lambda match: (
+                match.group(1)
+                + match.group(2).rstrip(", ")
+                + ", fill opacity=0.4, draw opacity=0.8]"
+            ),
+            tex,
+        )
+
+        with open(self.outfile, "w", encoding="utf-8") as file:
+            file.write(tex)
 
     def _get_axis_label(self, label, algo, num_wins):
         if label:
@@ -273,3 +302,4 @@ class ScatterMultiPlotReport(PlanningReport):
             self.outfile += suffix
         tools.makedirs(os.path.dirname(self.outfile))
         self._write_plot(self.runs.values(), self.outfile)
+        self._add_tex_transparency()
