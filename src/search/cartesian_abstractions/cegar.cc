@@ -6,6 +6,8 @@
 #include "transition_system.h"
 #include "utils.h"
 
+#include "transition.h"
+
 #include "../task_utils/task_properties.h"
 #include "../tasks/domain_abstracted_task.h"
 #include "../utils/logging.h"
@@ -152,6 +154,23 @@ bool CEGAR::may_keep_refining() const {
     return true;
 }
 
+bool CEGAR::solution_still_valid(Solution &solution) const {
+    int current_id = abstraction->get_initial_state().get_id();
+    for (Transition &transition : solution) {
+        Transitions out = abstraction->get_outgoing_transitions(current_id);
+        auto it = find_if(
+            out.begin(), out.end(),
+            [&](const Transition &t) { return t.op_id == transition.op_id; });
+        if (it == out.end()) {
+            // Der Split hat diesen Teil des Pfads zerstört.
+            return false;
+        }
+        transition.target_id = it->target_id;
+        current_id = it->target_id;
+    }
+    return abstraction->get_goals().count(current_id) != 0;
+}
+
 void CEGAR::refinement_loop() {
     /*
       For landmark tasks we have to map all states in which the
@@ -196,30 +215,39 @@ void CEGAR::refinement_loop() {
     utils::Timer refine_timer(false);
     utils::Timer update_goal_distances_timer(false);
 
+    int number_of_searches = 0;
+    unique_ptr<Solution> solution;
+
     while (may_keep_refining()) {
-        find_trace_timer.resume();
-        unique_ptr<Solution> solution;
-        solution = shortest_paths->extract_solution(
-            abstraction->get_initial_state().get_id(),
-            abstraction->get_goals());
-        find_trace_timer.stop();
+        bool need_new_solution =
+            !solution ||
+            pick_flawed_abstract_state != PickFlawedAbstractState::FIRST_ON_SHORTEST_PATH;
 
-        if (solution) {
-            int new_abstract_solution_cost =
-                shortest_paths->get_32bit_goal_distance(
-                    abstraction->get_initial_state().get_id());
-            if (new_abstract_solution_cost > old_abstract_solution_cost) {
-                old_abstract_solution_cost = new_abstract_solution_cost;
-                if (log.is_at_least_verbose()) {
-                    log << "Lower bound: " << old_abstract_solution_cost
-                        << endl;
+        if (need_new_solution) {
+            find_trace_timer.resume();
+            solution = shortest_paths->extract_solution(
+                abstraction->get_initial_state().get_id(),
+                abstraction->get_goals());
+            find_trace_timer.stop();
+            number_of_searches++;
+
+            if (solution) {
+                int new_abstract_solution_cost =
+                    shortest_paths->get_32bit_goal_distance(
+                        abstraction->get_initial_state().get_id());
+                if (new_abstract_solution_cost > old_abstract_solution_cost) {
+                    old_abstract_solution_cost = new_abstract_solution_cost;
+                    if (log.is_at_least_verbose()) {
+                        log << "Lower bound: " << old_abstract_solution_cost
+                            << endl;
+                    }
                 }
+            } else {
+                log << "Abstract task is unsolvable." << endl;
+                break;
             }
-        } else {
-            log << "Abstract task is unsolvable." << endl;
-            break;
         }
-
+        
         find_flaw_timer.resume();
         // split==nullptr iff we find a concrete solution or run out of time or
         // memory.
@@ -264,6 +292,13 @@ void CEGAR::refinement_loop() {
             split->var_id);
         update_goal_distances_timer.stop();
 
+        // NEU: prüfen, ob wir dieselbe Lösung weiterverwenden können.
+        if (pick_flawed_abstract_state ==
+                PickFlawedAbstractState::FIRST_ON_SHORTEST_PATH &&
+            solution && !solution_still_valid(*solution)) {
+            solution = nullptr; // Pfad zerstört -> nächste Iteration neu suchen
+        }
+
         if (log.is_at_least_verbose() &&
             abstraction->get_num_states() % 1000 == 0) {
             log << abstraction->get_num_states() << "/" << max_states
@@ -281,6 +316,7 @@ void CEGAR::refinement_loop() {
         log << "Number of refinements: " << abstraction->get_num_states() - 1
             << endl;
     }
+    log << "Number of searches: " << number_of_searches << endl;
 }
 
 void CEGAR::dump_dot_graph() const {

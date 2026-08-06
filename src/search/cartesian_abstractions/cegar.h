@@ -66,6 +66,12 @@ class CEGAR {
     // Build abstraction.
     void refinement_loop();
 
+    // NEU: Prüft, ob die gegebene Transitionsfolge nach einem Refine noch
+    // ein gültiger Pfad init -> goal in der (jetzt verfeinerten) Abstraktion
+    // ist. Aktualisiert dabei die target_id der einzelnen Transitionen,
+    // falls sich die State-IDs durch den Split geändert haben.
+    bool solution_still_valid(Solution &solution) const;
+    
     void dump_dot_graph() const;
     void print_statistics() const;
 
