@@ -12,8 +12,6 @@
 #include <execution>
 #include <map>
 
-#include <random>
-
 using namespace std;
 
 namespace cartesian_abstractions {
@@ -151,26 +149,27 @@ unique_ptr<Solution> ShortestPaths::extract_solution(
         return nullptr;
     }
 
-    static std::mt19937 rng(std::random_device{}());
-
     int current_state = init_id;
     unique_ptr<Solution> solution = make_unique<Solution>();
     assert(!goals.count(current_state));
     while (!goals.count(current_state)) {
         assert(!use_cache || !parents[current_state].empty());
-        // Pick arbitrary parent if there are multiple parents.
-
-        //Transition t =
-        //    use_cache ? parents[current_state].front() : parent[current_state];
+        // Pick a uniformly random parent among all tied optimal parents.
         Transition t;
         if (use_cache) {
-            const auto &ps = parents[current_state];
-            std::uniform_int_distribution<size_t> dist(0, ps.size() - 1);
-            t = ps[dist(rng)];
+            const Transitions &tied_parents = parents[current_state];
+            int choice = (tied_parents.size() == 1)
+                             ? 0
+                             : rng.random(static_cast<int>(tied_parents.size()));
+            t = tied_parents[choice];
+            if (tied_parents.size() > 1) {
+                cerr << "[tie-break] state=" << current_state
+                     << " num_tied=" << tied_parents.size()
+                     << " chose_index=" << choice << endl;
+            }
         } else {
             t = parent[current_state];
         }
-
         assert(t.is_defined());
         assert(t.target_id != current_state);
         assert(

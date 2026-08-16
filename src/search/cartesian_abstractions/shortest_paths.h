@@ -7,7 +7,9 @@
 #include <cassert>
 #include <memory>
 #include <queue>
+#include <random>
 #include <vector>
+#include "../utils/rng.h"
 
 namespace utils {
 class CountdownTimer;
@@ -102,6 +104,10 @@ class ShortestPaths {
     const TransitionRewirer &rewirer;
     const utils::CountdownTimer &timer;
     utils::LogProxy &log;
+    // Owned by this class; always seeded randomly (not from --random-seed),
+    // so solution extraction breaks ties among optimal solutions randomly.
+    utils::RandomNumberGenerator rng =
+        utils::RandomNumberGenerator(std::random_device{}());
     const int max_cached_parents;
     bool use_cache;
     const bool debug;
