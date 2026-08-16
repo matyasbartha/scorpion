@@ -129,6 +129,10 @@ class ShortestPaths {
 
     // Store single shortest path for each state if use_cache=false.
     std::deque<Transition> parent;
+    // Number of tied-optimal parents seen so far for each state, used only
+    // when use_cache=false to pick a uniformly random parent via reservoir
+    // sampling without storing more than one transition per state.
+    std::vector<int> tie_counts;
 
     static Cost add_costs(Cost a, Cost b);
     int convert_to_32_bit_cost(Cost cost) const;
@@ -137,6 +141,7 @@ class ShortestPaths {
     void resize(int num_states);
     void set_parent(int state, const Transition &new_parent);
     void add_parent(int state, const Transition &new_parent);
+    void handle_tied_parent(int state, const Transition &tied_parent);
     void remove_parent(int state, const Transition &parent);
     void clear_parents(int state);
     void remove_child(int state, const Transition &child);

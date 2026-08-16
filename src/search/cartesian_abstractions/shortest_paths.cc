@@ -95,6 +95,7 @@ void ShortestPaths::resize(int num_states) {
         parents.resize(num_states);
     } else {
         parent.resize(num_states);
+        tie_counts.resize(num_states, 1);
     }
 }
 
@@ -133,9 +134,8 @@ void ShortestPaths::recompute(
                 set_parent(succ_id, Transition(op_id, state_id));
                 open_queue.push(succ_g, succ_id);
             } else if (
-                use_cache && succ_g != INF_COSTS &&
-                succ_g == states[succ_id].goal_distance) {
-                add_parent(succ_id, Transition(op_id, state_id));
+                succ_g != INF_COSTS && succ_g == states[succ_id].goal_distance) {
+                handle_tied_parent(succ_id, Transition(op_id, state_id));
             }
         }
     }
@@ -158,15 +158,10 @@ unique_ptr<Solution> ShortestPaths::extract_solution(
         Transition t;
         if (use_cache) {
             const Transitions &tied_parents = parents[current_state];
-            int choice = (tied_parents.size() == 1)
-                             ? 0
-                             : rng.random(static_cast<int>(tied_parents.size()));
-            t = tied_parents[choice];
-            if (tied_parents.size() > 1) {
-                cerr << "[tie-break] state=" << current_state
-                     << " num_tied=" << tied_parents.size()
-                     << " chose_index=" << choice << endl;
-            }
+            t = (tied_parents.size() == 1)
+                    ? tied_parents.front()
+                    : tied_parents[rng.random(
+                          static_cast<int>(tied_parents.size()))];
         } else {
             t = parent[current_state];
         }
@@ -199,6 +194,23 @@ void ShortestPaths::set_parent(int state, const Transition &new_parent) {
         add_parent(state, new_parent);
     } else {
         parent[state] = new_parent;
+        tie_counts[state] = 1;
+    }
+}
+
+void ShortestPaths::handle_tied_parent(int state, const Transition &tied_parent) {
+    if (use_cache) {
+        add_parent(state, tied_parent);
+    } else {
+        // Reservoir sampling: this is the tie_counts[state]-th tied-optimal
+        // parent seen so far for `state` (including this one). Replacing the
+        // stored parent with probability 1/tie_counts[state] yields a
+        // uniformly random choice among all ties seen, without storing more
+        // than one transition per state.
+        ++tie_counts[state];
+        if (rng.random(tie_counts[state]) == 0) {
+            parent[state] = tied_parent;
+        }
     }
 }
 
@@ -494,10 +506,8 @@ void ShortestPaths::update_incrementally(
                 if (new_dist < min_dist) {
                     min_dist = new_dist;
                     set_parent(state, Transition(op_id, succ));
-                } else if (
-                    use_cache && new_dist != INF_COSTS &&
-                    new_dist == min_dist) {
-                    add_parent(state, Transition(op_id, succ));
+                } else if (new_dist != INF_COSTS && new_dist == min_dist) {
+                    handle_tied_parent(state, Transition(op_id, succ));
                 }
             }
         }
@@ -532,9 +542,9 @@ void ShortestPaths::update_incrementally(
                 set_parent(succ, Transition(op_id, state));
                 open_queue.push(succ_g, succ);
             } else if (
-                use_cache && states[succ].dirty &&
-                succ_g == states[succ].goal_distance && succ_g != INF_COSTS) {
-                add_parent(succ, Transition(op_id, state));
+                states[succ].dirty && succ_g == states[succ].goal_distance &&
+                succ_g != INF_COSTS) {
+                handle_tied_parent(succ, Transition(op_id, state));
             }
         }
     }
