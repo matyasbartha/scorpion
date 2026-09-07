@@ -155,20 +155,87 @@ bool CEGAR::may_keep_refining() const {
 }
 
 bool CEGAR::solution_still_valid(Solution &solution) const {
-    int current_id = abstraction->get_initial_state().get_id();
-    for (Transition &transition : solution) {
-        Transitions out = abstraction->get_outgoing_transitions(current_id);
-        auto it = find_if(
-            out.begin(), out.end(),
-            [&](const Transition &t) { return t.op_id == transition.op_id; });
-        if (it == out.end()) {
-            // Der Split hat diesen Teil des Pfads zerstört.
-            return false;
-        }
-        transition.target_id = it->target_id;
-        current_id = it->target_id;
+
+    // Store the fixed operator sequence.
+    vector<int> operator_sequence;
+    for (const Transition &transition : solution) {
+        operator_sequence.push_back(transition.op_id);
     }
-    return abstraction->get_goals().count(current_id) != 0;
+
+    // Search state:
+    //   (abstract state, position in operator sequence)
+    //
+    // For each search state, remember whether it has already been
+    // explored. This prevents repeatedly exploring the same suffix.
+    set<pair<int, int>> visited;
+
+    struct SearchNode {
+        int state_id;
+        int position;
+        vector<Transition> path;
+    };
+
+    vector<SearchNode> stack;
+
+    stack.push_back({
+        abstraction->get_initial_state().get_id(),
+        0,
+        {}
+    });
+
+    while (!stack.empty()) {
+
+        SearchNode node = move(stack.back());
+        stack.pop_back();
+
+        // We have already explored this (state, position).
+        if (!visited.insert({node.state_id, node.position}).second) {
+            continue;
+        }
+
+        // All operators have been matched.
+        if (node.position ==
+            static_cast<int>(operator_sequence.size())) {
+
+            // The reconstructed path must end in an abstract goal.
+            if (abstraction->get_goals().count(node.state_id)) {
+
+                // Replace the old solution by the path in the
+                // current abstraction.
+                solution.clear();
+
+                for (const Transition &transition : node.path) {
+                    solution.push_back(transition);
+                }
+
+                return true;
+            }
+
+            continue;
+        }
+
+        int required_op = operator_sequence[node.position];
+
+        // Try every transition with the required operator.
+        for (const Transition &transition :
+             abstraction->get_outgoing_transitions(node.state_id)) {
+
+            if (transition.op_id != required_op) {
+                continue;
+            }
+
+            SearchNode next = node;
+
+            next.state_id = transition.target_id;
+            next.position++;
+            next.path.push_back(transition);
+
+            stack.push_back(move(next));
+        }
+    }
+
+    // No abstract path with this operator sequence reaches a goal.
+    return false;
 }
 
 void CEGAR::refinement_loop() {
@@ -217,12 +284,14 @@ void CEGAR::refinement_loop() {
 
     int number_of_searches = 0;
     unique_ptr<Solution> solution;
-
+    int counter = 0;
     while (may_keep_refining()) {
         bool need_new_solution =
             !solution ||
             pick_flawed_abstract_state != PickFlawedAbstractState::FIRST_ON_SHORTEST_PATH;
-
+        if (!need_new_solution) {
+            ++counter;
+        }
         if (need_new_solution) {
             find_trace_timer.resume();
             solution = shortest_paths->extract_solution(
@@ -317,6 +386,8 @@ void CEGAR::refinement_loop() {
             << endl;
     }
     log << "Number of searches: " << number_of_searches << endl;
+    log << "Solution was still valid: " << counter
+        << endl;
 }
 
 void CEGAR::dump_dot_graph() const {
