@@ -155,56 +155,92 @@ bool CEGAR::may_keep_refining() const {
 }
 
 bool CEGAR::solution_still_valid(Solution &solution) const {
-
-    // Store the fixed operator sequence.
+    // Extract the operator sequence.
     vector<int> operator_sequence;
+    operator_sequence.reserve(solution.size());
+
     for (const Transition &transition : solution) {
         operator_sequence.push_back(transition.op_id);
     }
 
-    // Search state:
-    //   (abstract state, position in operator sequence)
+    const int num_states = abstraction->get_num_states();
+    const int sequence_length = operator_sequence.size();
+
+    // Each node is identified by:
     //
-    // For each search state, remember whether it has already been
-    // explored. This prevents repeatedly exploring the same suffix.
-    set<pair<int, int>> visited;
+    //     (position in operator sequence, abstract state)
+    //
+    // predecessor[position][state_id] tells us how we reached
+    // that node.
+    struct Predecessor {
+        int state_id;
+        Transition transition;
+    };
+
+    // We only need predecessor information for positions > 0.
+    vector<vector<Predecessor>> predecessor(
+        sequence_length + 1,
+        vector<Predecessor>(num_states));
+
+    vector<vector<bool>> visited(
+        sequence_length + 1,
+        vector<bool>(num_states, false));
 
     struct SearchNode {
         int state_id;
         int position;
-        vector<Transition> path;
     };
 
     vector<SearchNode> stack;
+    stack.reserve((sequence_length + 1) * num_states);
+
+    const int initial_state_id =
+        abstraction->get_initial_state().get_id();
 
     stack.push_back({
-        abstraction->get_initial_state().get_id(),
-        0,
-        {}
+        initial_state_id,
+        0
     });
 
     while (!stack.empty()) {
-
-        SearchNode node = move(stack.back());
+        SearchNode node = stack.back();
         stack.pop_back();
 
-        // We have already explored this (state, position).
-        if (!visited.insert({node.state_id, node.position}).second) {
+        const int state_id = node.state_id;
+        const int position = node.position;
+
+        if (visited[position][state_id]) {
             continue;
         }
 
-        // All operators have been matched.
-        if (node.position ==
-            static_cast<int>(operator_sequence.size())) {
+        visited[position][state_id] = true;
 
-            // The reconstructed path must end in an abstract goal.
-            if (abstraction->get_goals().count(node.state_id)) {
+        // We have consumed the complete operator sequence.
+        if (position == sequence_length) {
+            if (abstraction->get_goals().count(state_id)) {
 
-                // Replace the old solution by the path in the
-                // current abstraction.
+                // Reconstruct the solution backwards.
+                vector<Transition> reversed_path;
+                reversed_path.reserve(sequence_length);
+
+                int current_state = state_id;
+                int current_position = position;
+
+                while (current_position > 0) {
+                    const Predecessor &pred =
+                        predecessor[current_position][current_state];
+
+                    reversed_path.push_back(pred.transition);
+
+                    current_state = pred.state_id;
+                    --current_position;
+                }
+
+                reverse(reversed_path.begin(), reversed_path.end());
+
                 solution.clear();
 
-                for (const Transition &transition : node.path) {
+                for (const Transition &transition : reversed_path) {
                     solution.push_back(transition);
                 }
 
@@ -214,27 +250,41 @@ bool CEGAR::solution_still_valid(Solution &solution) const {
             continue;
         }
 
-        int required_op = operator_sequence[node.position];
+        const int required_op = operator_sequence[position];
 
-        // Try every transition with the required operator.
         for (const Transition &transition :
-             abstraction->get_outgoing_transitions(node.state_id)) {
+             abstraction->get_outgoing_transitions(state_id)) {
 
             if (transition.op_id != required_op) {
                 continue;
             }
 
-            SearchNode next = node;
+            const int next_state = transition.target_id;
+            const int next_position = position + 1;
 
-            next.state_id = transition.target_id;
-            next.position++;
-            next.path.push_back(transition);
+            if (visited[next_position][next_state]) {
+                continue;
+            }
 
-            stack.push_back(move(next));
+            // Store how we reached this node.
+            //
+            // Only the first predecessor is needed because if we
+            // reach the same (state, position) again, the remainder
+            // of the search is identical.
+            if (next_position > 0) {
+                predecessor[next_position][next_state] = {
+                    state_id,
+                    transition
+                };
+            }
+
+            stack.push_back({
+                next_state,
+                next_position
+            });
         }
     }
 
-    // No abstract path with this operator sequence reaches a goal.
     return false;
 }
 
