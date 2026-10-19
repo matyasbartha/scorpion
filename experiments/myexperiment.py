@@ -59,6 +59,11 @@ CONFIGS += [
         "origin/random-path",
         ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
     ),
+    common_setup.Config(
+        f"old-master-cegar",
+        "origin/old-optimized-master",
+        ["--search", "astar(cegar(subtasks=[original()],pick_flawed_abstract_state=first_on_shortest_path))"],
+    ),
 ]
 
 
