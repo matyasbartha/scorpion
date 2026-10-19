@@ -69,6 +69,13 @@ def get_parser():
     )
 
     parser.add_pattern(
+        "number_of_new_optimal_searches",
+        r"Number of searches: (\d+)",
+        required=False,
+        type=int,
+    )
+
+    parser.add_pattern(
         "num_state_expansions_in_flaw_search",
         r"\] #Expanded concrete states: (.+)\n",
         type=int,
