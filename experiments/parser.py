@@ -100,6 +100,18 @@ def get_parser():
     )
 
     parser.add_pattern(
+        "search_time",
+        r"\] Search time: (.+)s\n",
+        type=float,
+    )
+
+    parser.add_pattern(
+        "total_time",
+        r"\] Total time: (.+)s\n",
+        type=float,
+    )
+
+    parser.add_pattern(
         "split_computing_time",
         r"\] Time for computing splits: (.+)s\n",
         type=float,
